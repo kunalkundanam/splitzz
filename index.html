@@ -165,11 +165,11 @@
 
           <!-- Scanner Animated Box -->
           <div id="scanner-overlay" class="pointer-events-none absolute inset-0 flex items-center justify-center">
-            <div class="w-44 h-44 border-2 border-emerald-400/60 rounded-2xl relative">
-              <span class="absolute -top-1 -left-1 w-4 h-4 border-t-2 border-l-2 border-emerald-400 rounded-tl"></span>
-              <span class="absolute -top-1 -right-1 w-4 h-4 border-t-2 border-r-2 border-emerald-400 rounded-tr"></span>
-              <span class="absolute -bottom-1 -left-1 w-4 h-4 border-b-2 border-l-2 border-emerald-400 rounded-bl"></span>
-              <span class="absolute -bottom-1 -right-1 w-4 h-4 border-b-2 border-r-2 border-emerald-400 rounded-br"></span>
+            <div class="w-52 h-52 border-2 border-emerald-400/70 rounded-2xl relative">
+              <span class="absolute -top-1 -left-1 w-5 h-5 border-t-2 border-l-2 border-emerald-400 rounded-tl"></span>
+              <span class="absolute -top-1 -right-1 w-5 h-5 border-t-2 border-r-2 border-emerald-400 rounded-tr"></span>
+              <span class="absolute -bottom-1 -left-1 w-5 h-5 border-b-2 border-l-2 border-emerald-400 rounded-bl"></span>
+              <span class="absolute -bottom-1 -right-1 w-5 h-5 border-b-2 border-r-2 border-emerald-400 rounded-br"></span>
               <div id="scanner-laser" class="hidden absolute left-2 right-2 h-0.5 bg-gradient-to-r from-transparent via-emerald-400 to-transparent animate-scan-line"></div>
             </div>
           </div>
@@ -197,9 +197,14 @@
 
         <!-- Camera Controls Active -->
         <div id="scanner-controls-active" class="hidden mt-3 flex items-center justify-between text-xs">
-          <span class="text-[11px] text-slate-400">Position QR inside frame</span>
+          <div class="flex items-center gap-2">
+            <button id="toggle-torch-btn" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 flex items-center gap-1 active:scale-95">
+              <i data-lucide="zap" class="w-3.5 h-3.5"></i> Torch
+            </button>
+            <span class="text-[11px] text-slate-400">Align QR in box</span>
+          </div>
           <button id="stop-camera-btn" class="px-3 py-1.5 rounded-lg bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 flex items-center gap-1 border border-rose-500/30 active:scale-95">
-            <i data-lucide="camera-off" class="w-3.5 h-3.5"></i> Close Scanner
+            <i data-lucide="camera-off" class="w-3.5 h-3.5"></i> Close
           </button>
         </div>
       </div>
@@ -635,6 +640,7 @@
       currentChunkIndex: 0,
       isCameraActive: false,
       html5QrCode: null,
+      isTorchOn: false,
       history: JSON.parse(localStorage.getItem('splitzz_history') || localStorage.getItem('upi_splitpay_history') || '[]'),
     };
 
@@ -702,24 +708,46 @@
     const parseUpiUri = (rawUri) => {
       if (!rawUri || typeof rawUri !== 'string') return null;
       let uri = rawUri.trim();
-      if (!uri.startsWith('upi://pay')) {
-        const idx = uri.indexOf('upi://pay?');
-        if (idx !== -1) uri = uri.substring(idx);
-        else return null;
-      }
-      try {
-        const queryStr = uri.split('?')[1];
-        if (!queryStr) return null;
-        const params = new URLSearchParams(queryStr);
+
+      // Check if raw text is directly a UPI VPA (e.g. 9876543210@paytm or merchant@icici)
+      const vpaRegex = /^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/;
+      if (vpaRegex.test(uri)) {
         return {
-          vpa: decodeURIComponent(params.get('pa') || ''),
-          name: decodeURIComponent(params.get('pn') || 'Merchant').replace(/\+/g, ' '),
-          amount: parseFloat(params.get('am')) || null,
-          note: decodeURIComponent(params.get('tn') || params.get('mc') || '').replace(/\+/g, ' ')
+          vpa: uri,
+          name: uri.split('@')[0],
+          amount: null,
+          note: ''
         };
-      } catch (err) {
-        return null;
       }
+
+      // Handle standard or web-wrapped UPI formats
+      let queryStr = '';
+      if (uri.includes('upi://pay')) {
+        const parts = uri.split('?');
+        queryStr = parts.length > 1 ? parts[1] : '';
+      } else if (uri.includes('?pa=') || uri.includes('&pa=')) {
+        queryStr = uri.includes('?') ? uri.split('?')[1] : uri;
+      }
+
+      if (queryStr) {
+        try {
+          const params = new URLSearchParams(queryStr);
+          const vpa = params.get('pa') || '';
+          if (vpa) {
+            const rawAmount = params.get('am');
+            return {
+              vpa: decodeURIComponent(vpa),
+              name: (params.get('pn') ? decodeURIComponent(params.get('pn')) : (vpa.split('@')[0] || 'Merchant')).replace(/\+/g, ' '),
+              amount: rawAmount ? parseFloat(rawAmount) : null,
+              note: (params.get('tn') ? decodeURIComponent(params.get('tn')) : '').replace(/\+/g, ' ')
+            };
+          }
+        } catch (err) {
+          console.warn('Query string parse error:', err);
+        }
+      }
+
+      return null;
     };
 
     /* Split Engine */
@@ -785,7 +813,12 @@
 
       try {
         if (!State.html5QrCode) {
-          State.html5QrCode = new Html5Qrcode('qr-reader');
+          // Enable native BarcodeDetector API for instant hardware-accelerated scanning on Android
+          State.html5QrCode = new Html5Qrcode('qr-reader', {
+            experimentalFeatures: {
+              useBarCodeDetectorIfSupported: true
+            }
+          });
         }
 
         placeholder.classList.add('hidden');
@@ -794,22 +827,42 @@
         statusDot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-ping';
         statusText.textContent = 'Scanning...';
 
+        // Dynamic responsive qrbox calculation for high-density merchant QRs
+        const qrboxFunction = (viewfinderWidth, viewfinderHeight) => {
+          const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+          const edge = Math.floor(minEdge * 0.78);
+          return { width: edge, height: edge };
+        };
+
+        const config = {
+          fps: 25,
+          qrbox: qrboxFunction,
+          aspectRatio: 1.0,
+          videoConstraints: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            focusMode: { ideal: 'continuous' }
+          }
+        };
+
         await State.html5QrCode.start(
           { facingMode: 'environment' },
-          { fps: 15, qrbox: { width: 200, height: 200 }, aspectRatio: 1.0 },
+          config,
           (decodedText) => {
             onQrScannedSuccess(decodedText);
           },
-          () => {}
+          () => {} // Scanning in progress
         );
         State.isCameraActive = true;
       } catch (err) {
+        console.error('Camera start error:', err);
         statusDot.className = 'w-2 h-2 rounded-full bg-rose-500';
         statusText.textContent = 'Blocked';
         placeholder.classList.remove('hidden');
         activeControls.classList.add('hidden');
         laser.classList.add('hidden');
-        showToast('Camera permission denied. Use manual form.', 'camera-off', 'text-amber-400');
+        showToast('Camera error: check permissions or use Gallery button', 'camera-off', 'text-amber-400');
       }
     };
 
@@ -820,6 +873,7 @@
         } catch (e) {}
       }
       State.isCameraActive = false;
+      State.isTorchOn = false;
       document.getElementById('scanner-placeholder').classList.remove('hidden');
       document.getElementById('scanner-controls-active').classList.add('hidden');
       document.getElementById('scanner-laser').classList.add('hidden');
@@ -834,25 +888,36 @@
       if (parsed && parsed.vpa) {
         State.vpa = parsed.vpa;
         document.getElementById('input-vpa').value = parsed.vpa;
+        
         if (parsed.name) {
           State.payeeName = parsed.name;
           document.getElementById('input-name').value = parsed.name;
         }
-        if (parsed.amount) {
-          State.totalAmount = parsed.amount;
-          document.getElementById('input-amount').value = parsed.amount;
-        }
+
         if (parsed.note) {
           State.note = parsed.note;
           document.getElementById('input-note').value = parsed.note;
         }
 
         document.getElementById('detected-badge').classList.remove('hidden');
-        showToast('UPI Code Recognized!', 'check-circle-2', 'text-emerald-400');
         stopCameraScanner();
+
+        // Handle Countertop Merchant QRs that do NOT have a pre-set amount
+        if (parsed.amount && parsed.amount > 0) {
+          State.totalAmount = parsed.amount;
+          document.getElementById('input-amount').value = parsed.amount;
+          showToast(`QR Scanned: ${parsed.name} (₹${parsed.amount})`, 'check-circle-2', 'text-emerald-400');
+        } else {
+          showToast(`Store detected: ${parsed.name}! Enter bill amount.`, 'check-circle', 'text-emerald-400');
+          const amountInput = document.getElementById('input-amount');
+          amountInput.focus();
+          amountInput.classList.add('ring-2', 'ring-emerald-400');
+          setTimeout(() => amountInput.classList.remove('ring-2', 'ring-emerald-400'), 2000);
+        }
+
         recalculateSplitsPreview();
       } else {
-        showToast('Scanned QR is not a valid UPI code', 'alert-circle', 'text-amber-400');
+        showToast('QR detected, but not a valid UPI payment code', 'alert-circle', 'text-amber-400');
       }
     };
 
@@ -1189,21 +1254,37 @@
         stopCameraScanner();
       });
 
-      // Gallery QR File Upload
+      // Torch / Flashlight Toggle
+      document.getElementById('toggle-torch-btn').addEventListener('click', async () => {
+        if (!State.html5QrCode || !State.isCameraActive) return;
+        try {
+          State.isTorchOn = !State.isTorchOn;
+          await State.html5QrCode.applyVideoConstraints({
+            advanced: [{ torch: State.isTorchOn }]
+          });
+          showToast(State.isTorchOn ? 'Torch On' : 'Torch Off', 'zap', 'text-amber-400');
+        } catch (e) {
+          showToast('Torch not supported on this camera', 'alert-circle', 'text-slate-400');
+        }
+      });
+
+      // Gallery QR File Upload with high-accuracy fallback
       document.getElementById('qr-file-input').addEventListener('change', async (e) => {
         const file = e.target.files[0];
         if (!file) return;
         triggerHaptic('light');
-        showToast('Scanning QR file...', 'loader', 'text-teal-400');
+        showToast('Scanning QR photo...', 'loader', 'text-teal-400');
 
         try {
           if (!State.html5QrCode) {
-            State.html5QrCode = new Html5Qrcode('qr-reader');
+            State.html5QrCode = new Html5Qrcode('qr-reader', {
+              experimentalFeatures: { useBarCodeDetectorIfSupported: true }
+            });
           }
           const decoded = await State.html5QrCode.scanFile(file, true);
           onQrScannedSuccess(decoded);
         } catch (err) {
-          showToast('Could not detect UPI QR in image', 'alert-triangle', 'text-rose-400');
+          showToast('Could not read QR. Try camera or enter VPA manually.', 'alert-triangle', 'text-rose-400');
         }
       });
 
