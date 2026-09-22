@@ -1,0 +1,1233 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>Splitzz - Smart UPI Splitter</title>
+  
+  <meta name="application-name" content="Splitzz" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Splitzz" />
+  <meta name="theme-color" content="#07090e" />
+  <meta name="mobile-web-app-capable" content="yes" />
+
+  <!-- Dynamic PWA Manifest & App Icons -->
+  <link rel="manifest" id="manifest-link" />
+
+  <!-- External libraries: Tailwind, Google Fonts, Lucide, QRCode, HTML5-QRCode, Confetti -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
+            display: ['"Outfit"', 'system-ui', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              50: '#ecfdf5',
+              400: '#34d399',
+              500: '#10b981',
+              600: '#059669',
+              dark: '#07090e',
+              card: '#10141d',
+              cardHover: '#171d2b',
+              border: '#1c2436'
+            }
+          },
+          animation: {
+            'scan-line': 'scan 2s linear infinite',
+            'bounce-once': 'bounce 0.75s ease-in-out 1',
+          },
+          keyframes: {
+            scan: {
+              '0%': { top: '6%' },
+              '50%': { top: '88%' },
+              '100%': { top: '6%' },
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* Mobile-first and native PWA optimizations */
+    html, body {
+      overscroll-behavior-y: none;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    input, textarea {
+      user-select: text;
+      -webkit-user-select: text;
+    }
+    .safe-top {
+      padding-top: max(12px, env(safe-area-inset-top));
+    }
+    .safe-bottom {
+      padding-bottom: max(16px, env(safe-area-inset-bottom));
+    }
+    .native-glass {
+      background: rgba(16, 20, 29, 0.88);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .glow-accent {
+      box-shadow: 0 0 30px -5px rgba(16, 185, 129, 0.3);
+    }
+    /* Hide scrollbars on horizontal carousel */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+</head>
+
+<body class="bg-[#07090e] text-slate-100 min-h-screen flex flex-col font-sans antialiased overflow-x-hidden">
+
+  <header class="sticky top-0 z-40 safe-top bg-[#07090e]/90 backdrop-blur-xl border-b border-brand-border">
+    <div class="max-w-md mx-auto px-4 py-2.5 flex items-center justify-between">
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-300 flex items-center justify-center shadow-md shadow-emerald-500/20">
+          <i data-lucide="layers" class="w-4 h-4 text-slate-950 stroke-[2.5]"></i>
+        </div>
+        <div>
+          <h1 class="text-base font-bold font-display tracking-tight text-white flex items-center gap-1.5 leading-tight">
+            Split<span class="text-emerald-400">zz</span>
+            <span class="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">PWA</span>
+          </h1>
+          <p class="text-[10px] text-slate-400">UPI Multi-QR Settlement</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-1.5">
+        <!-- PWA Install button (displayed when install prompt is triggered) -->
+        <button id="pwa-install-btn" class="hidden px-2.5 py-1 rounded-lg bg-emerald-500 text-slate-950 text-[11px] font-bold items-center gap-1 shadow-sm active:scale-95 transition-all">
+          <i data-lucide="download" class="w-3.5 h-3.5 stroke-[2.5]"></i> Install
+        </button>
+        <button id="top-faq-btn" class="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white transition-colors" title="Rules & FAQ">
+          <i data-lucide="help-circle" class="w-4 h-4 text-amber-400"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- PWA Install App Toast / Banner for mobile users -->
+  <div id="install-banner" class="hidden bg-gradient-to-r from-emerald-950/60 to-slate-900 border-b border-emerald-500/20 px-4 py-2">
+    <div class="max-w-md mx-auto flex items-center justify-between text-xs">
+      <div class="flex items-center gap-2">
+        <i data-lucide="smartphone" class="w-4 h-4 text-emerald-400"></i>
+        <span class="text-slate-300">Add <strong>Splitzz</strong> to Home Screen</span>
+      </div>
+      <button id="banner-install-btn" class="text-emerald-400 font-bold hover:underline">Install Now</button>
+    </div>
+  </div>
+
+  <main class="flex-1 w-full max-w-md mx-auto px-4 py-4 space-y-4 pb-24">
+
+    <!-- VIEW 1: SCANNER & CONFIGURATION -->
+    <section id="view-setup" class="space-y-4">
+      
+      <!-- Camera Viewport Card -->
+      <div class="native-glass rounded-3xl p-4 relative overflow-hidden shadow-2xl">
+        <div class="flex items-center justify-between mb-3">
+          <div class="flex items-center gap-2">
+            <span class="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400">
+              <i data-lucide="scan" class="w-4 h-4"></i>
+            </span>
+            <h2 class="text-sm font-semibold text-white">Scan Merchant QR</h2>
+          </div>
+          <div class="flex items-center gap-1.5 bg-slate-900/80 px-2 py-1 rounded-full border border-slate-800">
+            <span id="camera-status-dot" class="w-2 h-2 rounded-full bg-amber-400"></span>
+            <span id="camera-status-text" class="text-[11px] text-slate-400 font-medium">Ready</span>
+          </div>
+        </div>
+
+        <div class="relative w-full aspect-square max-h-64 rounded-2xl bg-[#080b11] border border-slate-800 flex flex-col items-center justify-center overflow-hidden" id="scanner-container">
+          <div id="qr-reader" class="w-full h-full"></div>
+
+          <!-- Scanner Animated Box -->
+          <div id="scanner-overlay" class="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <div class="w-44 h-44 border-2 border-emerald-400/60 rounded-2xl relative">
+              <span class="absolute -top-1 -left-1 w-4 h-4 border-t-2 border-l-2 border-emerald-400 rounded-tl"></span>
+              <span class="absolute -top-1 -right-1 w-4 h-4 border-t-2 border-r-2 border-emerald-400 rounded-tr"></span>
+              <span class="absolute -bottom-1 -left-1 w-4 h-4 border-b-2 border-l-2 border-emerald-400 rounded-bl"></span>
+              <span class="absolute -bottom-1 -right-1 w-4 h-4 border-b-2 border-r-2 border-emerald-400 rounded-br"></span>
+              <div id="scanner-laser" class="hidden absolute left-2 right-2 h-0.5 bg-gradient-to-r from-transparent via-emerald-400 to-transparent animate-scan-line"></div>
+            </div>
+          </div>
+
+          <!-- Standby Start Panel -->
+          <div id="scanner-placeholder" class="absolute inset-0 bg-[#07090e]/95 flex flex-col items-center justify-center p-5 text-center space-y-3 z-10">
+            <div class="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
+              <i data-lucide="camera" class="w-6 h-6"></i>
+            </div>
+            <div>
+              <p class="text-xs font-semibold text-slate-200">Point at Store QR Code</p>
+              <p class="text-[11px] text-slate-500 mt-0.5">PhonePe, BharatPe, Google Pay, or Paytm QR</p>
+            </div>
+            <div class="flex gap-2 w-full pt-1">
+              <button id="start-camera-btn" class="flex-1 py-2.5 px-3 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-500/20 active:scale-95 transition-all">
+                <i data-lucide="camera" class="w-3.5 h-3.5"></i> Open Camera
+              </button>
+              <label class="flex-1 py-2.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer border border-slate-700 active:scale-95 transition-all">
+                <i data-lucide="image" class="w-3.5 h-3.5 text-emerald-400"></i> Gallery
+                <input type="file" id="qr-file-input" accept="image/*" class="hidden" />
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Camera Controls Active -->
+        <div id="scanner-controls-active" class="hidden mt-3 flex items-center justify-between text-xs">
+          <span class="text-[11px] text-slate-400">Position QR inside frame</span>
+          <button id="stop-camera-btn" class="px-3 py-1.5 rounded-lg bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 flex items-center gap-1 border border-rose-500/30 active:scale-95">
+            <i data-lucide="camera-off" class="w-3.5 h-3.5"></i> Close Scanner
+          </button>
+        </div>
+      </div>
+
+      <div class="native-glass rounded-3xl p-5 space-y-4 shadow-xl">
+        
+        <!-- Preset Examples -->
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Quick Test Samples</span>
+            <span class="text-[10px] text-emerald-400">Tap to load</span>
+          </div>
+          <div class="grid grid-cols-3 gap-2">
+            <button type="button" class="preset-pill p-2 rounded-xl bg-slate-900/90 hover:bg-slate-800/90 border border-slate-800 text-left transition-all group active:scale-95" data-vpa="supermart@icici" data-name="Reliance Fresh Mart" data-amount="5400" data-note="Grocery Supplies">
+              <p class="text-[10px] text-slate-400 group-hover:text-emerald-300">Grocery</p>
+              <p class="text-xs font-bold text-white">₹5,400</p>
+              <p class="text-[9px] text-slate-500">3 chunks</p>
+            </button>
+            <button type="button" class="preset-pill p-2 rounded-xl bg-slate-900/90 hover:bg-slate-800/90 border border-slate-800 text-left transition-all group active:scale-95" data-vpa="croma.tech@hdfcbank" data-name="Croma Electronics" data-amount="8200" data-note="Monitor Bill">
+              <p class="text-[10px] text-slate-400 group-hover:text-emerald-300">Gadget</p>
+              <p class="text-xs font-bold text-white">₹8,200</p>
+              <p class="text-[9px] text-slate-500">5 chunks</p>
+            </button>
+            <button type="button" class="preset-pill p-2 rounded-xl bg-slate-900/90 hover:bg-slate-800/90 border border-slate-800 text-left transition-all group active:scale-95" data-vpa="dining.table@axis" data-name="Barbeque Nation" data-amount="3998" data-note="Dinner Buffet">
+              <p class="text-[10px] text-slate-400 group-hover:text-emerald-300">Dining</p>
+              <p class="text-xs font-bold text-white">₹3,998</p>
+              <p class="text-[9px] text-slate-500">2 chunks</p>
+            </button>
+          </div>
+        </div>
+
+        <!-- Editable UPI Form -->
+        <div class="space-y-3 pt-2 border-t border-slate-800">
+          <div class="flex items-center justify-between">
+            <label class="text-[11px] font-semibold text-slate-300 uppercase tracking-wider">UPI Target Details</label>
+            <span id="detected-badge" class="hidden text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full font-medium">Auto-Filled</span>
+          </div>
+
+          <div>
+            <label class="block text-[11px] text-slate-400 mb-1">Payee UPI ID (VPA)</label>
+            <div class="relative">
+              <input id="input-vpa" type="text" placeholder="merchant@upi" class="w-full bg-slate-900/90 border border-slate-700/70 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono transition-colors" value="lakshmi.supermart@upi" />
+              <i data-lucide="at-sign" class="w-3.5 h-3.5 text-slate-500 absolute right-3.5 top-3"></i>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2.5">
+            <div>
+              <label class="block text-[11px] text-slate-400 mb-1">Merchant Name</label>
+              <input id="input-name" type="text" placeholder="Store Name" class="w-full bg-slate-900/90 border border-slate-700/70 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500" value="Lakshmi Super Store" />
+            </div>
+            <div>
+              <label class="block text-[11px] text-slate-400 mb-1">Total Bill (₹)</label>
+              <input id="input-amount" type="number" min="1" step="any" placeholder="0.00" class="w-full bg-slate-900/90 border border-slate-700/70 rounded-xl px-3 py-2.5 text-xs text-white font-bold focus:outline-none focus:border-emerald-500" value="5400" />
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-[11px] text-slate-400 mb-1">Note / Reference</label>
+            <input id="input-note" type="text" placeholder="Bill ID or Remark" class="w-full bg-slate-900/90 border border-slate-700/70 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500" value="Order #509" />
+          </div>
+        </div>
+
+        <!-- Chunk Limit Configuration -->
+        <div class="pt-2 border-t border-slate-800">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-[11px] font-semibold text-slate-300">Max Cap Per Chunk</span>
+            <span id="current-threshold-label" class="text-xs font-mono font-bold text-emerald-400">₹1,999</span>
+          </div>
+          <div class="grid grid-cols-4 gap-2">
+            <button type="button" class="threshold-chip py-1.5 rounded-xl border text-xs font-semibold bg-emerald-500/20 text-emerald-300 border-emerald-500/40 text-center active:scale-95" data-val="1999">₹1,999</button>
+            <button type="button" class="threshold-chip py-1.5 rounded-xl border text-xs font-semibold bg-slate-900 text-slate-400 border-slate-800 hover:border-slate-700 text-center active:scale-95" data-val="1990">₹1,990</button>
+            <button type="button" class="threshold-chip py-1.5 rounded-xl border text-xs font-semibold bg-slate-900 text-slate-400 border-slate-800 hover:border-slate-700 text-center active:scale-95" data-val="1950">₹1,950</button>
+            <button type="button" class="threshold-chip py-1.5 rounded-xl border text-xs font-semibold bg-slate-900 text-slate-400 border-slate-800 hover:border-slate-700 text-center active:scale-95" data-val="1000">₹1,000</button>
+          </div>
+        </div>
+
+        <!-- Formula Preview Card -->
+        <div id="split-summary-box" class="p-3.5 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800 space-y-1.5">
+          <div class="flex items-center justify-between text-xs">
+            <span class="text-slate-400">Sequential Plan:</span>
+            <span id="preview-breakdown-count" class="font-bold text-white">3 Payments</span>
+          </div>
+          <div id="preview-breakdown-formula" class="text-xs font-mono text-emerald-400/90 font-medium break-all">
+            ₹1,999 + ₹1,999 + ₹1,402
+          </div>
+          <div class="flex items-center justify-between text-[11px] pt-1 text-slate-400 border-t border-slate-800">
+            <span>Estimated MDR Threshold:</span>
+            <span id="preview-mdr-savings" class="text-emerald-400 font-bold">~₹21.60</span>
+          </div>
+        </div>
+
+        <!-- Primary Generation Button -->
+        <button id="generate-splits-btn" class="w-full py-3.5 bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-400 hover:from-emerald-600 hover:to-teal-600 text-slate-950 font-bold rounded-2xl text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/25 active:scale-[0.98] transition-all">
+          <i data-lucide="layers" class="w-4 h-4"></i> Generate Split QRs
+        </button>
+
+      </div>
+    </section>
+
+    <section id="view-hub" class="space-y-4 hidden">
+      
+      <!-- Stepper & Carousel Header -->
+      <div class="native-glass rounded-3xl p-4 shadow-xl space-y-3">
+        <div class="flex items-center justify-between">
+          <div>
+            <span class="text-[10px] font-bold tracking-wider text-emerald-400 uppercase">Active Session</span>
+            <h3 id="hub-merchant-name" class="text-sm font-bold text-white truncate max-w-[200px]">Merchant</h3>
+          </div>
+          <div class="text-right">
+            <span class="text-[11px] text-slate-400">Total Bill</span>
+            <p id="hub-total-amount" class="text-sm font-bold font-display text-white">₹0.00</p>
+          </div>
+        </div>
+
+        <!-- Progress Bar -->
+        <div>
+          <div class="flex items-center justify-between text-xs mb-1">
+            <span id="hub-progress-text" class="text-slate-300 font-medium">Payment 1 of 3</span>
+            <span id="hub-progress-pct" class="font-bold text-emerald-400 font-mono">0%</span>
+          </div>
+          <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden p-0.5">
+            <div id="hub-progress-fill" class="h-full bg-gradient-to-r from-teal-400 to-emerald-400 rounded-full transition-all duration-300" style="width: 0%"></div>
+          </div>
+        </div>
+
+        <!-- Horizontal Chunk Pills -->
+        <div id="chunks-pill-container" class="flex gap-2 overflow-x-auto py-1 no-scrollbar">
+          <!-- Injected via JavaScript -->
+        </div>
+      </div>
+
+      <!-- Active QR Chunk Card -->
+      <div class="native-glass rounded-3xl p-5 shadow-2xl relative overflow-hidden text-center space-y-4 glow-accent">
+        
+        <div class="flex items-center justify-between">
+          <span id="chunk-badge-index" class="text-xs px-2.5 py-1 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-full font-semibold">
+            Chunk #1
+          </span>
+          <div id="chunk-status-tag" class="flex items-center gap-1.5 text-xs font-semibold text-amber-400 bg-amber-400/10 px-2.5 py-1 rounded-full border border-amber-400/20">
+            <i data-lucide="clock" class="w-3.5 h-3.5"></i> Pending
+          </div>
+        </div>
+
+        <div>
+          <span class="text-[11px] text-slate-400 uppercase tracking-wider">Amount for this Scan</span>
+          <h2 id="chunk-active-amount" class="text-4xl font-extrabold font-display text-white tracking-tight mt-1">₹1,999.00</h2>
+          <p id="chunk-active-vpa" class="text-xs font-mono text-slate-400 mt-1 truncate">upi@bank</p>
+        </div>
+
+        <!-- Dynamic QR Display -->
+        <div class="flex flex-col items-center justify-center">
+          <div class="relative p-3.5 bg-white rounded-2xl shadow-xl flex items-center justify-center">
+            <div id="dynamic-qr-target" class="w-44 h-44 flex items-center justify-center overflow-hidden">
+              <!-- QRCode rendered here -->
+            </div>
+          </div>
+          <p class="text-[11px] text-slate-400 mt-2 flex items-center gap-1">
+            <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-400"></i> Below ₹2,000 interchange threshold
+          </p>
+        </div>
+
+        <!-- Direct Actions -->
+        <div class="space-y-2 pt-1">
+          <div class="grid grid-cols-2 gap-2">
+            <!-- Native UPI App Intent Link -->
+            <a id="chunk-pay-intent-btn" href="#" target="_blank" class="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-white flex items-center justify-center gap-1.5 active:scale-95 transition-all">
+              <i data-lucide="external-link" class="w-3.5 h-3.5 text-emerald-400"></i> Open UPI App
+            </a>
+            <!-- Copy URI link -->
+            <button id="chunk-copy-link-btn" class="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-slate-200 flex items-center justify-center gap-1.5 active:scale-95 transition-all">
+              <i data-lucide="copy" class="w-3.5 h-3.5 text-slate-400"></i> Copy URI
+            </button>
+          </div>
+
+          <!-- Mark Paid Toggle -->
+          <button id="chunk-mark-paid-btn" class="w-full py-3.5 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/25 active:scale-95 transition-all">
+            <i data-lucide="check-circle-2" class="w-4 h-4 stroke-[2.5]"></i> Mark as Paid
+          </button>
+        </div>
+
+        <!-- Next / Previous Controls -->
+        <div class="flex items-center justify-between pt-2 border-t border-slate-800">
+          <button id="chunk-prev-btn" class="text-xs text-slate-400 hover:text-white flex items-center gap-1 py-1 px-2 rounded-lg active:scale-95">
+            <i data-lucide="chevron-left" class="w-4 h-4"></i> Prev
+          </button>
+          <span id="chunk-stepper-counter" class="text-xs text-slate-500 font-mono">1 / 3</span>
+          <button id="chunk-next-btn" class="text-xs text-emerald-400 hover:text-emerald-300 flex items-center gap-1 py-1 px-2 rounded-lg active:scale-95">
+            Next <i data-lucide="chevron-right" class="w-4 h-4"></i>
+          </button>
+        </div>
+
+      </div>
+
+      <div class="text-center">
+        <button id="hub-back-edit-btn" class="text-xs text-slate-400 hover:text-slate-200 underline">
+          Edit Split Configuration
+        </button>
+      </div>
+
+    </section>
+
+    <section id="view-receipt" class="space-y-4 hidden">
+      <div class="native-glass rounded-3xl p-6 text-center space-y-4 border border-emerald-500/30 glow-accent">
+        <div class="w-14 h-14 rounded-full bg-emerald-500/20 text-emerald-400 mx-auto flex items-center justify-center border-2 border-emerald-500/40 animate-bounce-once">
+          <i data-lucide="check-check" class="w-7 h-7 stroke-[2.5]"></i>
+        </div>
+
+        <div>
+          <h2 class="text-lg font-bold font-display text-white">All Splits Settled!</h2>
+          <p class="text-xs text-slate-400 mt-0.5">Every chunk in this batch has been completed.</p>
+        </div>
+
+        <div class="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 text-left space-y-2 font-sans text-xs">
+          <div class="flex justify-between items-center text-slate-400 pb-1.5 border-b border-slate-800">
+            <span>Date & Time:</span>
+            <span id="receipt-date" class="text-slate-200 font-mono">Just Now</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-slate-400">Paid To:</span>
+            <span id="receipt-payee" class="text-white font-medium">Merchant</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-slate-400">Target VPA:</span>
+            <span id="receipt-vpa" class="text-slate-300 font-mono">vpa@bank</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-slate-400">Total Sum:</span>
+            <span id="receipt-total" class="text-emerald-400 font-bold font-display text-sm">₹0.00</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-slate-400">Splits Count:</span>
+            <span id="receipt-splits" class="text-slate-300 font-mono">3 Chunks</span>
+          </div>
+          <div class="flex justify-between items-center pt-1.5 border-t border-slate-800 text-emerald-400/90">
+            <span>Est. MDR Benefit:</span>
+            <span id="receipt-saved" class="font-bold">~₹21.60</span>
+          </div>
+        </div>
+
+        <div class="space-y-2 pt-1">
+          <button id="receipt-new-btn" class="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold rounded-2xl text-xs active:scale-95 transition-all shadow-md shadow-emerald-500/20">
+            Start New Bill
+          </button>
+          <button id="receipt-history-btn" class="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-2xl text-xs active:scale-95 transition-all">
+            Open History Log
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <section id="view-history" class="space-y-4 hidden">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-sm font-bold text-white font-display">Settlement History</h2>
+          <p class="text-[11px] text-slate-400">Saved transactions in this app</p>
+        </div>
+        <button id="clear-history-btn" class="text-xs text-rose-400 hover:text-rose-300 px-2 py-1 bg-rose-500/10 rounded-lg border border-rose-500/20 active:scale-95">
+          Clear
+        </button>
+      </div>
+
+      <div id="history-list-container" class="space-y-2">
+        <!-- Rendered dynamically -->
+      </div>
+    </section>
+
+    <!-- VIEW 5: FAQ & SETTINGS TAB -->
+    <section id="view-settings" class="space-y-4 hidden">
+      <div>
+        <h2 class="text-sm font-bold text-white font-display">FAQ & NPCI Rules</h2>
+        <p class="text-[11px] text-slate-400">Understanding MDR & UPI guidelines</p>
+      </div>
+
+      <div class="space-y-2.5 text-xs text-slate-300">
+        <div class="native-glass p-3.5 rounded-2xl border border-slate-800 space-y-1.5">
+          <p class="font-bold text-white flex items-center gap-1.5">
+            <i data-lucide="info" class="w-3.5 h-3.5 text-emerald-400"></i> Who pays the 0.4% fee above ₹2,000?
+          </p>
+          <p class="text-slate-400 text-[11px] leading-relaxed">
+            The merchant discount rate (MDR) is paid by merchants and commercial vendors to acquiring banks. UPI payments made by shoppers and individual consumers are free.
+          </p>
+        </div>
+
+        <div class="native-glass p-3.5 rounded-2xl border border-slate-800 space-y-1.5">
+          <p class="font-bold text-white flex items-center gap-1.5">
+            <i data-lucide="alert-triangle" class="w-3.5 h-3.5 text-amber-400"></i> Bank Velocity Limits
+          </p>
+          <p class="text-slate-400 text-[11px] leading-relaxed">
+            NPCI limits savings bank accounts to 20 UPI transactions per 24 hours. Multiple rapid payments of identical amounts to the same VPA might be flagged by automated bank anti-fraud filters.
+          </p>
+        </div>
+
+        <div class="native-glass p-3.5 rounded-2xl border border-slate-800 space-y-1.5">
+          <p class="font-bold text-white flex items-center gap-1.5">
+            <i data-lucide="smartphone" class="w-3.5 h-3.5 text-teal-400"></i> Progressive Web App Offline Mode
+          </p>
+          <p class="text-slate-400 text-[11px] leading-relaxed">
+            Splitzz installs directly on Android (Chrome) and iOS (Safari Share > Add to Home Screen) as a standalone app with offline support.
+          </p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <nav class="fixed bottom-0 inset-x-0 z-30 native-glass border-t border-brand-border safe-bottom">
+    <div class="max-w-md mx-auto px-4 flex justify-around items-center h-14">
+      <button class="nav-tab-btn flex flex-col items-center justify-center text-emerald-400 py-1 flex-1 transition-all active:scale-95" data-target="view-setup">
+        <i data-lucide="scan" class="w-4 h-4 mb-0.5"></i>
+        <span class="text-[10px] font-semibold">Scan & Split</span>
+      </button>
+      <button class="nav-tab-btn flex flex-col items-center justify-center text-slate-500 hover:text-slate-300 py-1 flex-1 transition-all active:scale-95 relative" data-target="view-hub">
+        <i data-lucide="layers" class="w-4 h-4 mb-0.5"></i>
+        <span class="text-[10px] font-semibold">Pay Hub</span>
+        <span id="hub-badge-dot" class="hidden absolute top-1 right-1/4 w-2 h-2 rounded-full bg-emerald-400"></span>
+      </button>
+      <button class="nav-tab-btn flex flex-col items-center justify-center text-slate-500 hover:text-slate-300 py-1 flex-1 transition-all active:scale-95" data-target="view-history">
+        <i data-lucide="history" class="w-4 h-4 mb-0.5"></i>
+        <span class="text-[10px] font-semibold">History</span>
+      </button>
+      <button class="nav-tab-btn flex flex-col items-center justify-center text-slate-500 hover:text-slate-300 py-1 flex-1 transition-all active:scale-95" data-target="view-settings">
+        <i data-lucide="help-circle" class="w-4 h-4 mb-0.5"></i>
+        <span class="text-[10px] font-semibold">FAQ</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Toast Notification Overlay -->
+  <div id="toast" class="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-3.5 py-2 rounded-xl bg-slate-900/95 border border-slate-700 shadow-2xl text-xs font-semibold text-white flex items-center gap-2 pointer-events-none transition-all duration-300 opacity-0 -translate-y-4">
+    <i id="toast-icon" data-lucide="info" class="w-4 h-4 text-emerald-400"></i>
+    <span id="toast-message">Notification</span>
+  </div>
+
+  <script>
+    // 1. Dynamic Inline Web App Manifest (PWA compliant without requiring external JSON files)
+    const pwaIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+      <rect width="512" height="512" rx="120" fill="#07090e"/>
+      <rect x="32" y="32" width="448" height="448" rx="96" fill="#10141d" stroke="#1c2436" stroke-width="8"/>
+      <path d="M256 120 L380 184 L256 248 L132 184 Z" fill="#10b981"/>
+      <path d="M132 232 L256 296 L380 232" fill="none" stroke="#34d399" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M132 296 L256 360 L380 296" fill="none" stroke="#059669" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`;
+    
+    const iconDataUri = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(pwaIconSvg);
+
+    const manifestData = {
+      name: "Splitzz - UPI Multi-QR Settlement",
+      short_name: "Splitzz",
+      start_url: window.location.href,
+      scope: window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1),
+      display: "standalone",
+      orientation: "portrait",
+      background_color: "#07090e",
+      theme_color: "#07090e",
+      icons: [
+        {
+          src: iconDataUri,
+          sizes: "192x192 512x512",
+          type: "image/svg+xml",
+          purpose: "any maskable"
+        }
+      ]
+    };
+
+    const manifestBlob = new Blob([JSON.stringify(manifestData)], { type: 'application/json' });
+    document.getElementById('manifest-link').setAttribute('href', URL.createObjectURL(manifestBlob));
+
+    // 2. Service Worker Registration via Blob for Offline PWA Capabilities
+    if ('serviceWorker' in navigator) {
+      const swScript = `
+        const CACHE_NAME = 'splitzz-pwa-v1';
+        self.addEventListener('install', (e) => {
+          self.skipWaiting();
+        });
+        self.addEventListener('activate', (e) => {
+          e.waitUntil(clients.claim());
+        });
+        self.addEventListener('fetch', (e) => {
+          // Pass-through network first, fallback to cached response if offline
+          if (e.request.method !== 'GET') return;
+          e.respondWith(
+            fetch(e.request).catch(() => caches.match(e.request))
+          );
+        });
+      `;
+      const swBlob = new Blob([swScript], { type: 'application/javascript' });
+      const swUrl = URL.createObjectURL(swBlob);
+      navigator.serviceWorker.register(swUrl).catch((err) => {
+        console.warn('PWA ServiceWorker Notice:', err);
+      });
+    }
+
+    // 3. PWA beforeinstallprompt capture
+    let deferredPrompt = null;
+    const installBtn = document.getElementById('pwa-install-btn');
+    const installBanner = document.getElementById('install-banner');
+    const bannerInstallBtn = document.getElementById('banner-install-btn');
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      installBtn.classList.remove('hidden');
+      installBtn.classList.add('flex');
+      installBanner.classList.remove('hidden');
+    });
+
+    const triggerPwaInstall = async () => {
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        if (outcome === 'accepted') {
+          installBtn.classList.add('hidden');
+          installBanner.classList.add('hidden');
+        }
+        deferredPrompt = null;
+      }
+    };
+
+    installBtn.addEventListener('click', triggerPwaInstall);
+    bannerInstallBtn.addEventListener('click', triggerPwaInstall);
+  </script>
+
+  <script>
+    /* App State Store */
+    const State = {
+      vpa: 'lakshmi.supermart@upi',
+      payeeName: 'Lakshmi Super Store',
+      totalAmount: 5400,
+      note: 'Order #509',
+      threshold: 1999,
+      splits: [],
+      currentChunkIndex: 0,
+      isCameraActive: false,
+      html5QrCode: null,
+      history: JSON.parse(localStorage.getItem('splitzz_history') || localStorage.getItem('upi_splitpay_history') || '[]'),
+    };
+
+    let qrCodeInstance = null;
+
+    /* Native Haptic Feedback & Web Audio Simulator */
+    const triggerHaptic = (type = 'light') => {
+      // Hardware vibration on Android / supported devices
+      if ('vibrate' in navigator) {
+        if (type === 'light') navigator.vibrate(12);
+        else if (type === 'medium') navigator.vibrate([25]);
+        else if (type === 'success') navigator.vibrate([30, 50, 30]);
+      }
+
+      // Audio synthesizer fallback
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        const t = ctx.currentTime;
+
+        if (type === 'light' || type === 'medium') {
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(650, t);
+          gain.gain.setValueAtTime(0.12, t);
+          gain.gain.linearRampToValueAtTime(0.01, t + 0.04);
+          osc.start(t);
+          osc.stop(t + 0.04);
+        } else if (type === 'success') {
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(523.25, t);
+          osc.frequency.setValueAtTime(659.25, t + 0.08);
+          osc.frequency.setValueAtTime(1046.5, t + 0.16);
+          gain.gain.setValueAtTime(0.2, t);
+          gain.gain.linearRampToValueAtTime(0.01, t + 0.35);
+          osc.start(t);
+          osc.stop(t + 0.35);
+        }
+      } catch (e) {}
+    };
+
+    /* In-App Toast Messenger */
+    const showToast = (message, icon = 'info', color = 'text-emerald-400') => {
+      const toast = document.getElementById('toast');
+      const msg = document.getElementById('toast-message');
+      const ic = document.getElementById('toast-icon');
+
+      msg.textContent = message;
+      ic.setAttribute('data-lucide', icon);
+      ic.className = `w-4 h-4 ${color}`;
+      lucide.createIcons();
+
+      toast.classList.remove('opacity-0', '-translate-y-4');
+      toast.classList.add('opacity-100', 'translate-y-0');
+
+      setTimeout(() => {
+        toast.classList.remove('opacity-100', 'translate-y-0');
+        toast.classList.add('opacity-0', '-translate-y-4');
+      }, 2500);
+    };
+
+    /* UPI URI Parser */
+    const parseUpiUri = (rawUri) => {
+      if (!rawUri || typeof rawUri !== 'string') return null;
+      let uri = rawUri.trim();
+      if (!uri.startsWith('upi://pay')) {
+        const idx = uri.indexOf('upi://pay?');
+        if (idx !== -1) uri = uri.substring(idx);
+        else return null;
+      }
+      try {
+        const queryStr = uri.split('?')[1];
+        if (!queryStr) return null;
+        const params = new URLSearchParams(queryStr);
+        return {
+          vpa: decodeURIComponent(params.get('pa') || ''),
+          name: decodeURIComponent(params.get('pn') || 'Merchant').replace(/\+/g, ' '),
+          amount: parseFloat(params.get('am')) || null,
+          note: decodeURIComponent(params.get('tn') || params.get('mc') || '').replace(/\+/g, ' ')
+        };
+      } catch (err) {
+        return null;
+      }
+    };
+
+    /* Split Engine */
+    const calculateSplits = (total, maxChunk) => {
+      const chunks = [];
+      let remaining = Math.round(total * 100) / 100;
+      const cap = Math.max(1, maxChunk);
+
+      while (remaining > 0) {
+        const chunkAmt = remaining > cap ? cap : remaining;
+        chunks.push({
+          id: 'chk_' + Math.random().toString(36).substr(2, 6),
+          amount: Math.round(chunkAmt * 100) / 100,
+          paid: false,
+        });
+        remaining = Math.round((remaining - chunkAmt) * 100) / 100;
+      }
+      return chunks;
+    };
+
+    const formatINR = (val) => {
+      return new Intl.NumberFormat('en-IN', {
+        style: 'currency',
+        currency: 'INR',
+        maximumFractionDigits: 2
+      }).format(val || 0);
+    };
+
+    /* View Switcher */
+    const navigateTo = (viewId) => {
+      triggerHaptic('light');
+      const views = ['view-setup', 'view-hub', 'view-receipt', 'view-history', 'view-settings'];
+      views.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.add('hidden');
+      });
+
+      const activeEl = document.getElementById(viewId);
+      if (activeEl) activeEl.classList.remove('hidden');
+
+      document.querySelectorAll('.nav-tab-btn').forEach(btn => {
+        const target = btn.getAttribute('data-target');
+        if (target === viewId) {
+          btn.classList.remove('text-slate-500');
+          btn.classList.add('text-emerald-400');
+        } else {
+          btn.classList.add('text-slate-500');
+          btn.classList.remove('text-emerald-400');
+        }
+      });
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      lucide.createIcons();
+    };
+
+    /* Camera Scanner Implementation */
+    const initCameraScanner = async () => {
+      const statusText = document.getElementById('camera-status-text');
+      const statusDot = document.getElementById('camera-status-dot');
+      const placeholder = document.getElementById('scanner-placeholder');
+      const activeControls = document.getElementById('scanner-controls-active');
+      const laser = document.getElementById('scanner-laser');
+
+      try {
+        if (!State.html5QrCode) {
+          State.html5QrCode = new Html5Qrcode('qr-reader');
+        }
+
+        placeholder.classList.add('hidden');
+        activeControls.classList.remove('hidden');
+        laser.classList.remove('hidden');
+        statusDot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-ping';
+        statusText.textContent = 'Scanning...';
+
+        await State.html5QrCode.start(
+          { facingMode: 'environment' },
+          { fps: 15, qrbox: { width: 200, height: 200 }, aspectRatio: 1.0 },
+          (decodedText) => {
+            onQrScannedSuccess(decodedText);
+          },
+          () => {}
+        );
+        State.isCameraActive = true;
+      } catch (err) {
+        statusDot.className = 'w-2 h-2 rounded-full bg-rose-500';
+        statusText.textContent = 'Blocked';
+        placeholder.classList.remove('hidden');
+        activeControls.classList.add('hidden');
+        laser.classList.add('hidden');
+        showToast('Camera permission denied. Use manual form.', 'camera-off', 'text-amber-400');
+      }
+    };
+
+    const stopCameraScanner = async () => {
+      if (State.html5QrCode && State.isCameraActive) {
+        try {
+          await State.html5QrCode.stop();
+        } catch (e) {}
+      }
+      State.isCameraActive = false;
+      document.getElementById('scanner-placeholder').classList.remove('hidden');
+      document.getElementById('scanner-controls-active').classList.add('hidden');
+      document.getElementById('scanner-laser').classList.add('hidden');
+      document.getElementById('camera-status-dot').className = 'w-2 h-2 rounded-full bg-amber-400';
+      document.getElementById('camera-status-text').textContent = 'Ready';
+    };
+
+    const onQrScannedSuccess = (decodedText) => {
+      triggerHaptic('medium');
+      const parsed = parseUpiUri(decodedText);
+
+      if (parsed && parsed.vpa) {
+        State.vpa = parsed.vpa;
+        document.getElementById('input-vpa').value = parsed.vpa;
+        if (parsed.name) {
+          State.payeeName = parsed.name;
+          document.getElementById('input-name').value = parsed.name;
+        }
+        if (parsed.amount) {
+          State.totalAmount = parsed.amount;
+          document.getElementById('input-amount').value = parsed.amount;
+        }
+        if (parsed.note) {
+          State.note = parsed.note;
+          document.getElementById('input-note').value = parsed.note;
+        }
+
+        document.getElementById('detected-badge').classList.remove('hidden');
+        showToast('UPI Code Recognized!', 'check-circle-2', 'text-emerald-400');
+        stopCameraScanner();
+        recalculateSplitsPreview();
+      } else {
+        showToast('Scanned QR is not a valid UPI code', 'alert-circle', 'text-amber-400');
+      }
+    };
+
+    const recalculateSplitsPreview = () => {
+      const vpa = document.getElementById('input-vpa').value.trim();
+      const name = document.getElementById('input-name').value.trim() || 'Merchant';
+      const amount = parseFloat(document.getElementById('input-amount').value) || 0;
+      const note = document.getElementById('input-note').value.trim();
+
+      State.vpa = vpa;
+      State.payeeName = name;
+      State.totalAmount = amount;
+      State.note = note;
+
+      const splits = calculateSplits(amount, State.threshold);
+      State.splits = splits;
+
+      const formulaEl = document.getElementById('preview-breakdown-formula');
+      const countEl = document.getElementById('preview-breakdown-count');
+      const mdrEl = document.getElementById('preview-mdr-savings');
+
+      if (splits.length === 0 || amount <= 0) {
+        formulaEl.textContent = 'Enter a valid amount';
+        countEl.textContent = '0 Payments';
+        mdrEl.textContent = '₹0.00';
+        return;
+      }
+
+      countEl.textContent = `${splits.length} Payment${splits.length > 1 ? 's' : ''}`;
+      formulaEl.textContent = splits.map(s => formatINR(s.amount)).join(' + ');
+
+      if (amount > 2000) {
+        const saved = (amount * 0.004).toFixed(2);
+        mdrEl.textContent = `~₹${saved} estimated`;
+      } else {
+        mdrEl.textContent = 'No MDR (Below ₹2,000)';
+      }
+    };
+
+    const renderActiveChunk = () => {
+      if (!State.splits || State.splits.length === 0) return;
+
+      const idx = State.currentChunkIndex;
+      const current = State.splits[idx];
+
+      document.getElementById('hub-merchant-name').textContent = State.payeeName;
+      document.getElementById('hub-total-amount').textContent = formatINR(State.totalAmount);
+      document.getElementById('chunk-badge-index').textContent = `Chunk #${idx + 1} of ${State.splits.length}`;
+      document.getElementById('chunk-stepper-counter').textContent = `${idx + 1} / ${State.splits.length}`;
+      document.getElementById('chunk-active-amount').textContent = formatINR(current.amount);
+      document.getElementById('chunk-active-vpa').textContent = State.vpa;
+
+      const statusTag = document.getElementById('chunk-status-tag');
+      const markBtn = document.getElementById('chunk-mark-paid-btn');
+
+      if (current.paid) {
+        statusTag.className = 'flex items-center gap-1.5 text-xs font-semibold text-emerald-400 bg-emerald-400/10 px-2.5 py-1 rounded-full border border-emerald-400/20';
+        statusTag.innerHTML = `<i data-lucide="check-circle" class="w-3.5 h-3.5"></i> Paid`;
+        markBtn.innerHTML = `<i data-lucide="rotate-ccw" class="w-4 h-4"></i> Undo Paid Status`;
+        markBtn.className = 'w-full py-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-sm flex items-center justify-center gap-2 active:scale-95 transition-all';
+      } else {
+        statusTag.className = 'flex items-center gap-1.5 text-xs font-semibold text-amber-400 bg-amber-400/10 px-2.5 py-1 rounded-full border border-amber-400/20';
+        statusTag.innerHTML = `<i data-lucide="clock" class="w-3.5 h-3.5"></i> Pending`;
+        markBtn.innerHTML = `<i data-lucide="check-circle-2" class="w-4 h-4 stroke-[2.5]"></i> Mark as Paid`;
+        markBtn.className = 'w-full py-3.5 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/25 active:scale-95 transition-all';
+      }
+
+      // Generate Standard UPI URI string
+      const upiUri = `upi://pay?pa=${encodeURIComponent(State.vpa)}&pn=${encodeURIComponent(State.payeeName)}&am=${current.amount.toFixed(2)}&cu=INR&tn=${encodeURIComponent((State.note ? State.note + ' ' : '') + `(Part ${idx + 1}/${State.splits.length})`)}`;
+
+      document.getElementById('chunk-pay-intent-btn').href = upiUri;
+
+      document.getElementById('chunk-copy-link-btn').onclick = () => {
+        triggerHaptic('light');
+        const dummy = document.createElement('input');
+        document.body.appendChild(dummy);
+        dummy.value = upiUri;
+        dummy.select();
+        document.execCommand('copy');
+        document.body.removeChild(dummy);
+        showToast('UPI Link Copied!', 'check', 'text-emerald-400');
+      };
+
+      const qrTarget = document.getElementById('dynamic-qr-target');
+      qrTarget.innerHTML = '';
+      qrCodeInstance = new QRCode(qrTarget, {
+        text: upiUri,
+        width: 176,
+        height: 176,
+        colorDark: '#07090e',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M
+      });
+
+      updateProgressAndChips();
+      lucide.createIcons();
+    };
+
+    const updateProgressAndChips = () => {
+      const paidChunks = State.splits.filter(s => s.paid);
+      const paidAmount = paidChunks.reduce((acc, c) => acc + c.amount, 0);
+      const pct = State.totalAmount > 0 ? Math.round((paidAmount / State.totalAmount) * 100) : 0;
+
+      document.getElementById('hub-progress-pct').textContent = `${pct}%`;
+      document.getElementById('hub-progress-text').textContent = `${formatINR(paidAmount)} of ${formatINR(State.totalAmount)}`;
+      document.getElementById('hub-progress-fill').style.width = `${pct}%`;
+
+      const container = document.getElementById('chunks-pill-container');
+      container.innerHTML = '';
+
+      State.splits.forEach((chunk, index) => {
+        const isCurrent = index === State.currentChunkIndex;
+        const chip = document.createElement('button');
+        chip.className = `px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 flex-shrink-0 transition-all active:scale-95 ${
+          isCurrent
+            ? 'bg-emerald-500 text-slate-950 ring-2 ring-emerald-400 shadow-md'
+            : chunk.paid
+            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+            : 'bg-slate-900 text-slate-400 border border-slate-800'
+        }`;
+
+        const iconHtml = chunk.paid 
+          ? `<i data-lucide="check" class="w-3 h-3"></i>`
+          : `<span class="w-1.5 h-1.5 rounded-full ${isCurrent ? 'bg-slate-950' : 'bg-slate-600'}"></span>`;
+
+        chip.innerHTML = `${iconHtml} #${index + 1}: ${formatINR(chunk.amount)}`;
+        chip.onclick = () => {
+          triggerHaptic('light');
+          State.currentChunkIndex = index;
+          renderActiveChunk();
+        };
+        container.appendChild(chip);
+      });
+
+      // Update Hub dot notification
+      const hasPending = State.splits.some(s => !s.paid);
+      const hubDot = document.getElementById('hub-badge-dot');
+      if (hasPending && State.splits.length > 0) hubDot.classList.remove('hidden');
+      else hubDot.classList.add('hidden');
+
+      lucide.createIcons();
+    };
+
+    const triggerCompletionCelebration = () => {
+      triggerHaptic('success');
+      try {
+        confetti({ particleCount: 75, spread: 65, origin: { y: 0.6 } });
+      } catch (e) {}
+
+      const record = {
+        id: 'TXN_' + Date.now().toString(36).toUpperCase(),
+        date: new Date().toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' }),
+        payee: State.payeeName,
+        vpa: State.vpa,
+        total: State.totalAmount,
+        splitsCount: State.splits.length,
+        savedMdr: (State.totalAmount > 2000 ? State.totalAmount * 0.004 : 0).toFixed(2)
+      };
+
+      State.history.unshift(record);
+      localStorage.setItem('splitzz_history', JSON.stringify(State.history.slice(0, 30)));
+
+      document.getElementById('receipt-date').textContent = record.date;
+      document.getElementById('receipt-payee').textContent = record.payee;
+      document.getElementById('receipt-vpa').textContent = record.vpa;
+      document.getElementById('receipt-total').textContent = formatINR(record.total);
+      document.getElementById('receipt-splits').textContent = `${record.splitsCount} Chunks`;
+      document.getElementById('receipt-saved').textContent = `~₹${record.savedMdr}`;
+
+      setTimeout(() => {
+        navigateTo('view-receipt');
+      }, 600);
+    };
+
+    const renderHistoryView = () => {
+      const list = document.getElementById('history-list-container');
+      list.innerHTML = '';
+
+      if (State.history.length === 0) {
+        list.innerHTML = `
+          <div class="native-glass p-8 rounded-3xl text-center space-y-2">
+            <i data-lucide="clock" class="w-8 h-8 text-slate-600 mx-auto"></i>
+            <p class="text-xs font-semibold text-slate-400">No Settlement History</p>
+            <p class="text-[11px] text-slate-500">Completed split transactions appear here.</p>
+          </div>
+        `;
+        lucide.createIcons();
+        return;
+      }
+
+      State.history.forEach((item) => {
+        const card = document.createElement('div');
+        card.className = 'native-glass p-3.5 rounded-2xl flex items-center justify-between border border-slate-800/80';
+        card.innerHTML = `
+          <div class="space-y-0.5">
+            <div class="flex items-center gap-1.5">
+              <span class="text-xs font-bold text-white">${item.payee}</span>
+              <span class="text-[9px] text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded font-mono">${item.splitsCount} splits</span>
+            </div>
+            <p class="text-[10px] text-slate-400 font-mono">${item.vpa}</p>
+            <p class="text-[9px] text-slate-500">${item.date}</p>
+          </div>
+          <div class="text-right">
+            <p class="text-xs font-bold font-display text-white">${formatINR(item.total)}</p>
+            <span class="text-[9px] text-emerald-400 font-medium">Saved ~₹${item.savedMdr}</span>
+          </div>
+        `;
+        list.appendChild(card);
+      });
+      lucide.createIcons();
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+      recalculateSplitsPreview();
+
+      // Navigation Bar Tabs
+      document.querySelectorAll('.nav-tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const target = btn.getAttribute('data-target');
+          if (target === 'view-history') renderHistoryView();
+          navigateTo(target);
+        });
+      });
+
+      document.getElementById('top-faq-btn').addEventListener('click', () => {
+        navigateTo('view-settings');
+      });
+
+      // Sample Scenarios
+      document.querySelectorAll('.preset-pill').forEach(btn => {
+        btn.addEventListener('click', () => {
+          triggerHaptic('light');
+          document.getElementById('input-vpa').value = btn.getAttribute('data-vpa');
+          document.getElementById('input-name').value = btn.getAttribute('data-name');
+          document.getElementById('input-amount').value = btn.getAttribute('data-amount');
+          document.getElementById('input-note').value = btn.getAttribute('data-note');
+          recalculateSplitsPreview();
+          showToast(`Loaded ${btn.getAttribute('data-name')}`, 'check', 'text-emerald-400');
+        });
+      });
+
+      // Threshold Chips
+      document.querySelectorAll('.threshold-chip').forEach(btn => {
+        btn.addEventListener('click', () => {
+          triggerHaptic('light');
+          document.querySelectorAll('.threshold-chip').forEach(c => {
+            c.className = 'threshold-chip py-1.5 rounded-xl border text-xs font-semibold bg-slate-900 text-slate-400 border-slate-800 hover:border-slate-700 text-center active:scale-95';
+          });
+          btn.className = 'threshold-chip py-1.5 rounded-xl border text-xs font-semibold bg-emerald-500/20 text-emerald-300 border-emerald-500/40 text-center active:scale-95';
+          const val = parseInt(btn.getAttribute('data-val'), 10);
+          State.threshold = val;
+          document.getElementById('current-threshold-label').textContent = `₹${val.toLocaleString()}`;
+          recalculateSplitsPreview();
+        });
+      });
+
+      // Form inputs
+      ['input-vpa', 'input-name', 'input-amount', 'input-note'].forEach(id => {
+        document.getElementById(id).addEventListener('input', recalculateSplitsPreview);
+      });
+
+      // Generate Button
+      document.getElementById('generate-splits-btn').addEventListener('click', () => {
+        triggerHaptic('medium');
+        const amt = parseFloat(document.getElementById('input-amount').value);
+        const vpa = document.getElementById('input-vpa').value.trim();
+
+        if (!vpa || !vpa.includes('@')) {
+          showToast('Provide a valid UPI VPA (e.g. name@bank)', 'alert-circle', 'text-rose-400');
+          return;
+        }
+        if (!amt || amt <= 0) {
+          showToast('Provide a valid amount', 'alert-circle', 'text-rose-400');
+          return;
+        }
+
+        recalculateSplitsPreview();
+        State.currentChunkIndex = 0;
+        renderActiveChunk();
+        navigateTo('view-hub');
+      });
+
+      // Mark Paid Toggle
+      document.getElementById('chunk-mark-paid-btn').addEventListener('click', () => {
+        const current = State.splits[State.currentChunkIndex];
+        current.paid = !current.paid;
+        triggerHaptic(current.paid ? 'medium' : 'light');
+        renderActiveChunk();
+
+        const allPaid = State.splits.every(s => s.paid);
+        if (allPaid) {
+          triggerCompletionCelebration();
+        } else {
+          const nextUnpaidIdx = State.splits.findIndex(s => !s.paid);
+          if (nextUnpaidIdx !== -1) {
+            setTimeout(() => {
+              State.currentChunkIndex = nextUnpaidIdx;
+              renderActiveChunk();
+            }, 250);
+          }
+        }
+      });
+
+      // Stepper
+      document.getElementById('chunk-next-btn').addEventListener('click', () => {
+        triggerHaptic('light');
+        if (State.currentChunkIndex < State.splits.length - 1) {
+          State.currentChunkIndex++;
+          renderActiveChunk();
+        }
+      });
+
+      document.getElementById('chunk-prev-btn').addEventListener('click', () => {
+        triggerHaptic('light');
+        if (State.currentChunkIndex > 0) {
+          State.currentChunkIndex--;
+          renderActiveChunk();
+        }
+      });
+
+      document.getElementById('hub-back-edit-btn').addEventListener('click', () => {
+        navigateTo('view-setup');
+      });
+
+      // Camera Handlers
+      document.getElementById('start-camera-btn').addEventListener('click', () => {
+        triggerHaptic('light');
+        initCameraScanner();
+      });
+
+      document.getElementById('stop-camera-btn').addEventListener('click', () => {
+        triggerHaptic('light');
+        stopCameraScanner();
+      });
+
+      // Gallery QR File Upload
+      document.getElementById('qr-file-input').addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        triggerHaptic('light');
+        showToast('Scanning QR file...', 'loader', 'text-teal-400');
+
+        try {
+          if (!State.html5QrCode) {
+            State.html5QrCode = new Html5Qrcode('qr-reader');
+          }
+          const decoded = await State.html5QrCode.scanFile(file, true);
+          onQrScannedSuccess(decoded);
+        } catch (err) {
+          showToast('Could not detect UPI QR in image', 'alert-triangle', 'text-rose-400');
+        }
+      });
+
+      // Receipt navigation
+      document.getElementById('receipt-new-btn').addEventListener('click', () => {
+        document.getElementById('input-amount').value = '';
+        recalculateSplitsPreview();
+        navigateTo('view-setup');
+      });
+
+      document.getElementById('receipt-history-btn').addEventListener('click', () => {
+        renderHistoryView();
+        navigateTo('view-history');
+      });
+
+      // Clear history
+      document.getElementById('clear-history-btn').addEventListener('click', () => {
+        triggerHaptic('light');
+        State.history = [];
+        localStorage.removeItem('splitzz_history');
+        renderHistoryView();
+        showToast('History wiped', 'trash', 'text-slate-400');
+      });
+    });
+  </script>
+</body>
+</html>
